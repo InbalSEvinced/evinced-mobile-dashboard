@@ -105,8 +105,41 @@ for r in rows:
 # ── Internals ─────────────────────────────────────────────────────────────────
 INTERNALS = {"Evinced Demo Account", "Evinced Dev Team", "GD", "Evinced Support"}
 
-# ── HubSpot data ───────────────────────────────────────────────────────────────
-HUBSPOT = {
+# ── HubSpot + Zendesk data (loaded from fetch_hubspot.py / fetch_zendesk.py) ──
+def _load_account_metadata():
+    """Merge HubSpot and Zendesk data. Falls back to hardcoded defaults if files missing."""
+    hs_path = os.path.join(BASE, "hubspot_accounts.json")
+    zd_path = os.path.join(BASE, "zendesk_tickets.json")
+
+    hs = json.load(open(hs_path)) if os.path.exists(hs_path) else {}
+    zd = json.load(open(zd_path)) if os.path.exists(zd_path) else {}
+
+    if not hs:
+        print("⚠  hubspot_accounts.json not found — using fallback data. Run fetch_hubspot.py to populate.")
+    if not zd:
+        print("⚠  zendesk_tickets.json not found — ticket counts will show 0. Run fetch_zendesk.py to populate.")
+
+    # Merge: for every tenant seen in either source, combine fields
+    all_keys = set(hs.keys()) | set(zd.keys())
+    merged = {}
+    for k in all_keys:
+        h = hs.get(k, {})
+        z = zd.get(k, {})
+        merged[k] = {
+            "owner":         h.get("owner", "—"),
+            "se":            h.get("se", "—"),
+            "tam":           h.get("tam", "—"),
+            "renewal":       h.get("renewal", None),
+            "is_new":        h.get("is_new", False),
+            "tickets_all":   z.get("tickets_all", 0),
+            "tickets_month": z.get("tickets_month", 0),
+        }
+    return merged
+
+HUBSPOT = _load_account_metadata()
+
+# ── Hardcoded fallback (used only if hubspot_accounts.json is missing) ─────────
+_FALLBACK = {
     "Amazon Blink":         {"owner": "—",               "se": "Dominic Lucia",    "tam": "Gilad Aziza",   "is_new": False, "renewal": None,         "tickets_all": 2,  "tickets_month": 0},
     "American Airlines":    {"owner": "Jacob Hume",      "se": "Kevin Berg",       "tam": "Roei Ben Haim", "is_new": False, "renewal": None,         "tickets_all": 1,  "tickets_month": 0},
     "Auticon":              {"owner": "Julian Miller",   "se": "Chris Keene",      "tam": "—",             "is_new": False, "renewal": "2026-05-31", "tickets_all": 1,  "tickets_month": 0},
@@ -145,8 +178,10 @@ HUBSPOT = {
     "Subway":               {"owner": "Skye Hollins",    "se": "David Martin",     "tam": "—",             "is_new": False, "renewal": None,         "tickets_all": 1,  "tickets_month": 1},
     "TakeHomeTests":        {"owner": "—",               "se": "—",                "tam": "—",             "is_new": False, "renewal": None,         "tickets_all": 0,  "tickets_month": 0},
 }
+if not HUBSPOT:
+    HUBSPOT = _FALLBACK
 
-CURRENT_MONTH_TICKETS = 3
+CURRENT_MONTH_TICKETS = sum(v.get("tickets_month", 0) for v in HUBSPOT.values())
 
 # ── Derived summaries ──────────────────────────────────────────────────────────
 def user_id(r): return r.get("email") or r.get("serviceAccountId") or None

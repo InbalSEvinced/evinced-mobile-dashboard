@@ -5,6 +5,8 @@
 rows_with_sa.json
 latest_scan_dates.json
 timeseries_new.json
+hubspot_accounts.json
+zendesk_tickets.json
 
 # Dashboard outputs (generated artifacts)
 mobile-products-dashboard.html

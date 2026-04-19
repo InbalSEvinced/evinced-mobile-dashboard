@@ -21,10 +21,12 @@ SLACK_TOKEN   = os.environ.get("SLACK_BOT_TOKEN", "")
 SLACK_CHANNEL = "C0AT76PV6F6"   # #mobile_analytics
 
 STEPS = [
-    ("Fetching scan data from Coralogix",   os.path.join(BASE, "fetch_with_sa.py")),
-    ("Fetching latest scan dates",           os.path.join(BASE, "fetch_latest_scan_dates.py")),
-    ("Rebuilding HTML dashboard",            os.path.join(BASE, "rebuild_dashboard_v4.py")),
-    ("Rendering PDF",                        os.path.join(BASE, "render_pdf.py")),
+    ("Fetching scan data from Coralogix",       os.path.join(BASE, "fetch_with_sa.py")),
+    ("Fetching latest scan dates",               os.path.join(BASE, "fetch_latest_scan_dates.py")),
+    ("Fetching HubSpot account metadata",        os.path.join(BASE, "fetch_hubspot.py")),
+    ("Fetching Zendesk ticket counts",           os.path.join(BASE, "fetch_zendesk.py")),
+    ("Rebuilding HTML dashboard",                os.path.join(BASE, "rebuild_dashboard_v4.py")),
+    ("Rendering PDF",                            os.path.join(BASE, "render_pdf.py")),
 ]
 
 def run_step(label, script):
