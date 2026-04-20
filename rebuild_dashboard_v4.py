@@ -20,7 +20,7 @@ import json, csv, os
 from collections import defaultdict
 
 BASE    = os.path.dirname(os.path.abspath(__file__))
-OUTPUTS = os.path.join(BASE, "output")   # local: repo/output/  (deployed: mnt/outputs/)
+OUTPUTS = os.environ.get("OUTPUT_DIR") or os.path.join(BASE, "output")
 os.makedirs(OUTPUTS, exist_ok=True)
 
 # ── Load data ──────────────────────────────────────────────────────────────────

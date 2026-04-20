@@ -15,7 +15,7 @@ import subprocess, sys, os, json, urllib.request, urllib.error
 from datetime import datetime, timezone
 
 BASE    = os.path.dirname(os.path.abspath(__file__))
-OUTPUTS = os.path.join(BASE, "output")
+OUTPUTS = os.environ.get("OUTPUT_DIR") or os.path.join(BASE, "output")
 
 SLACK_TOKEN   = os.environ.get("SLACK_BOT_TOKEN", "")
 SLACK_CHANNEL = "C0AT76PV6F6"   # #mobile_analytics
