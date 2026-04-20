@@ -98,12 +98,23 @@ for pair in "${RUN_SA_NAME}:Mobile Dashboard Cloud Run runtime" \
   fi
 done
 
-# Runtime SA: read the secret
-gcloud secrets add-iam-policy-binding "${SECRET_NAME}" \
-  --project="${PROJECT}" \
-  --member="serviceAccount:${RUN_SA_EMAIL}" \
-  --role=roles/secretmanager.secretAccessor \
-  --condition=None >/dev/null
+# Runtime SA: read the secret. Retry because newly-created SAs can take a
+# few seconds to become visible to the secretmanager.setIamPolicy call.
+for attempt in 1 2 3 4 5 6; do
+  if gcloud secrets add-iam-policy-binding "${SECRET_NAME}" \
+       --project="${PROJECT}" \
+       --member="serviceAccount:${RUN_SA_EMAIL}" \
+       --role=roles/secretmanager.secretAccessor \
+       --condition=None >/dev/null 2>&1; then
+    break
+  fi
+  if [[ "${attempt}" -eq 6 ]]; then
+    echo "Secret IAM binding never succeeded after 6 attempts" >&2
+    exit 1
+  fi
+  echo "  Secret IAM binding attempt ${attempt} failed (SA not yet visible); retrying in 5s"
+  sleep 5
+done
 
 # ─── 6. Build + push image via Cloud Build ───
 say "Building image ${IMAGE}"

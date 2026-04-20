@@ -25,7 +25,10 @@ os.makedirs(OUTPUTS, exist_ok=True)
 
 # ── Load data ──────────────────────────────────────────────────────────────────
 rows        = json.load(open(os.path.join(BASE, "rows_with_sa.json")))
-timeseries  = json.load(open(os.path.join(BASE, "timeseries_new.json")))
+# timeseries_new.json is not produced by any script in this repo; the TIMESERIES
+# JS constant it feeds is declared but unused. Default to {} when absent.
+_ts_path = os.path.join(BASE, "timeseries_new.json")
+timeseries  = json.load(open(_ts_path)) if os.path.exists(_ts_path) else {}
 latest_scan = json.load(open(os.path.join(BASE, "latest_scan_dates.json")))
 
 # ── Pendo MFA feature events (CSV) ────────────────────────────────────────────
