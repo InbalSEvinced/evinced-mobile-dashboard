@@ -1,0 +1,85 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app.py'
+      - 'refresh_all.py'
+      - 'rebuild_dashboard_v4.py'
+      - 'render_pdf.py'
+      - 'fetch_with_sa.py'
+      - 'fetch_latest_scan_dates.py'
+      - 'fetch_zendesk.py'
+      - 'mfa_events.csv'
+      - 'requirements.txt'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      GCP_PROJECT: ${{ vars.GCP_PROJECT }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      ARTIFACT_REPO: ${{ vars.ARTIFACT_REPO }}
+      CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+      RUN_SERVICE_ACCOUNT: ${{ vars.RUN_SERVICE_ACCOUNT }}
+      GIT_SHA: ${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT }}
+
+      - name: Build and push image
+        run: |
+          IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT}/${ARTIFACT_REPO}/${CLOUD_RUN_SERVICE}:${GIT_SHA}"
+          echo "IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+          BUILD_ID=$(gcloud builds submit --project="${GCP_PROJECT}" --tag="${IMAGE}" --async --format='value(id)' .)
+          echo "Submitted build ${BUILD_ID}"
+          while :; do
+            STATUS=$(gcloud builds describe "${BUILD_ID}" --project="${GCP_PROJECT}" --format='value(status)')
+            echo "build ${BUILD_ID}: ${STATUS}"
+            case "${STATUS}" in
+              SUCCESS) break ;;
+              FAILURE|CANCELLED|TIMEOUT|INTERNAL_ERROR|EXPIRED) echo "build failed: ${STATUS}" >&2; exit 1 ;;
+              *) sleep 10 ;;
+            esac
+          done
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy "${CLOUD_RUN_SERVICE}" \
+            --project="${GCP_PROJECT}" \
+            --region="${GCP_REGION}" \
+            --image="${IMAGE}" \
+            --service-account="${RUN_SERVICE_ACCOUNT}" \
+            --no-allow-unauthenticated \
+            --ingress=all \
+            --min-instances=1 \
+            --max-instances=1 \
+            --cpu=1 \
+            --memory=2Gi \
+            --timeout=600 \
+            --set-env-vars=OUTPUT_DIR=/tmp/dashboard-output \
+            --set-secrets=CORALOGIX_API_KEY=coralogix-api-key:latest

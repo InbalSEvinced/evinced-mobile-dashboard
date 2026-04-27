@@ -66,6 +66,12 @@ timeseries_new.json (legacy, still required) ────────┘
 
 **Slack channel ID is hardcoded** in `refresh_all.py` (`SLACK_CHANNEL = "C0AT76PV6F6"` → `#mobile_analytics`).
 
+## Deployment
+
+Runs on Cloud Run in `ev-product-analytics` (the same project that hosts `tenant-health-dashboard`). Public URL is `https://product-analytics.evinced.engineering/mobile/` — IAP-gated to `group:product-analytics@evinced.com`. The shared LB strips `/mobile` before forwarding (`pathPrefixRewrite: /`), so the FastAPI app continues to serve at `/`. Static IP, cert, target proxy, forwarding rule, IAP OAuth brand, WIF pool, and the URL map itself are all owned by `tenant-health-dashboard/deploy.sh` — run that first; this repo's `deploy.sh` asserts those exist and only creates per-service pieces (AR repo, secret, SAs, Cloud Run, NEG, backend service) plus re-imports the URL map YAML to add the `/mobile/*` path rule.
+
+`.github/workflows/deploy.yml` deploys on push to `main` (paths-filtered) via WIF — no long-lived keys. `deploy.sh` publishes the required `vars.*` (`WIF_PROVIDER`, `DEPLOY_SERVICE_ACCOUNT`, `GCP_PROJECT`, `GCP_REGION`, `ARTIFACT_REPO`, `CLOUD_RUN_SERVICE`, `RUN_SERVICE_ACCOUNT`) on the GitHub repo via `gh variable set`. Cloud Scheduler `mobile-dashboard-refresh` POSTs to the `*.run.app` `/refresh` URL daily at 08:00 UTC, with OIDC from a dedicated scheduler SA (bypasses IAP via Cloud Run IAM).
+
 ## Generated vs. committed files
 
 `.gitignore` excludes all pipeline outputs — `rows_with_sa.json`, `latest_scan_dates.json`, `timeseries_new.json`, `hubspot_accounts.json`, `zendesk_tickets.json`, and the HTML/PDF. The only data file committed to the repo is `mfa_events.csv`, which is a **manual** monthly Pendo export — the `pendo_date_range` string in `rebuild_dashboard_v4.py` (currently `"Apr 1 – Apr 16, 2026"`) must be updated by hand when the CSV is refreshed.
