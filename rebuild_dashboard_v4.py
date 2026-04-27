@@ -1168,10 +1168,12 @@ applyFilters();
 </body>
 </html>"""
 
-out_path = os.path.join(OUTPUTS, "mobile-products-dashboard.html")
+out_path = os.path.join(MNT, "mobile-products-dashboard.html")
 with open(out_path, "w") as f:
     f.write(html)
+
 print(f"Written: {out_path}  ({len(html):,} chars)")
-print(f"SDK types (normalized): {[s['sdkType'] for s in SDK_TYPE_PIE]}")
-print(f"SDK type+variant combos: {len(SDK_TV_LIST)}")
-print(f"Detail rows: {len(detail_rows)}, Account rows: {len(account_rows)}")
+print(f"SDK types: {[s['sdkType'] for s in SDK_TYPE_PIE]}")
+print(f"SDK type+platform combos: {len(SDK_TV_LIST)}")
+print(f"Daily rows: {len(daily_rows)}, date range: {data_start} → {data_end}")
+print(f"Account rows: {len(account_rows)}, Detail rows: {len(detail_rows)}")
