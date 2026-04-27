@@ -1,82 +1,83 @@
 #!/usr/bin/env python3
 """
-Fetch ticket counts per account from Zendesk.
-Writes zendesk_tickets.json with total and monthly ticket counts per tenant.
+Fetch Zendesk mobile/MFA tickets → zendesk_severity.json, zendesk_by_type.json, zendesk_monthly.json
 
-Requires env vars: ZENDESK_SUBDOMAIN, ZENDESK_EMAIL, ZENDESK_API_TOKEN
+Authentication: uses ZENDESK_EMAIL + ZENDESK_API_TOKEN env vars (or hardcoded below).
+Run: python3 fetch_zendesk.py
 """
-import json, os, urllib.request, urllib.parse, base64
-from datetime import datetime, timezone, timedelta
+import urllib.request, urllib.parse, json, base64, os
+from collections import defaultdict
+from datetime import date
 
-BASE = os.path.dirname(os.path.abspath(__file__))
+BASE   = os.path.dirname(os.path.abspath(__file__))
+DOMAIN = os.getenv("ZENDESK_DOMAIN",    "https://evinced.zendesk.com")
+EMAIL  = os.getenv("ZENDESK_EMAIL",     "inbal.sanado@evinced.com")
+TOKEN  = os.getenv("ZENDESK_API_TOKEN", "hfDZeakYL7Zs7QYjFjFJucGAX4oAo2p9bDQAAUzQ")
 
-SUBDOMAIN = os.environ.get("ZENDESK_SUBDOMAIN", "")
-EMAIL     = os.environ.get("ZENDESK_EMAIL", "")
-API_TOKEN = os.environ.get("ZENDESK_API_TOKEN", "")
+creds   = base64.b64encode(f"{EMAIL}/token:{TOKEN}".encode()).decode()
+HEADERS = {"Authorization": f"Basic {creds}", "Content-Type": "application/json"}
 
-if not all([SUBDOMAIN, EMAIL, API_TOKEN]):
-    raise EnvironmentError(
-        "Missing Zendesk credentials. Set ZENDESK_SUBDOMAIN, ZENDESK_EMAIL, "
-        "and ZENDESK_API_TOKEN in your .env file."
-    )
-
-BASE_URL = f"https://{SUBDOMAIN}.zendesk.com/api/v2"
-AUTH = base64.b64encode(f"{EMAIL}/token:{API_TOKEN}".encode()).decode()
-HEADERS = {"Authorization": f"Basic {AUTH}", "Content-Type": "application/json"}
-
-now = datetime.now(timezone.utc)
-month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-month_start_str = month_start.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-def zendesk_get(path):
-    req = urllib.request.Request(f"{BASE_URL}{path}", headers=HEADERS)
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.loads(r.read())
-
-def search_tickets(query):
-    """Search Zendesk tickets and return count."""
-    encoded = urllib.parse.quote(query)
-    url = f"{BASE_URL}/search.json?query={encoded}&count_only=true"
+def fetch_page(url):
     req = urllib.request.Request(url, headers=HEADERS)
-    try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            data = json.loads(r.read())
-            return data.get("count", 0)
-    except Exception as e:
-        print(f"  ⚠ search error: {e}")
-        return 0
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read())
 
-def main():
-    rows_path = os.path.join(BASE, "rows_with_sa.json")
-    if not os.path.exists(rows_path):
-        raise FileNotFoundError(f"{rows_path} not found — run fetch_with_sa.py first")
+# ── Fetch all mobile/MFA tickets ──────────────────────────────────────────────
+all_tickets = []
+query = "type:ticket (mobile OR MFA)"
+url   = f"{DOMAIN}/api/v2/search.json?" + urllib.parse.urlencode({"query": query, "per_page": 100})
 
-    rows = json.load(open(rows_path))
-    tenant_names = sorted(set(r["tenantName"] for r in rows if r.get("tenantName")))
-    print(f"Fetching Zendesk ticket counts for {len(tenant_names)} tenants…")
+while url:
+    data = fetch_page(url)
+    all_tickets.extend(data.get("results", []))
+    url = data.get("next_page")
+    print(f"  Fetched {len(all_tickets)} tickets so far…")
 
-    results = {}
-    for i, name in enumerate(tenant_names, 1):
-        print(f"  [{i}/{len(tenant_names)}] {name}…", end=" ", flush=True)
+print(f"Total: {len(all_tickets)} mobile/MFA tickets")
 
-        # All-time tickets
-        tickets_all = search_tickets(f'type:ticket organization:"{name}"')
+# ── Severity breakdown ────────────────────────────────────────────────────────
+priority_count = defaultdict(int)
+status_count   = defaultdict(int)
+by_month       = defaultdict(int)
 
-        # This month's tickets
-        tickets_month = search_tickets(
-            f'type:ticket organization:"{name}" created>={month_start_str}'
-        )
+for t in all_tickets:
+    p = (t.get("priority") or "normal").title()
+    priority_count[p] += 1
+    status_count[t.get("status", "unknown")] += 1
+    month = t.get("created_at", "")[:7]
+    if month:
+        by_month[month] += 1
 
-        results[name] = {
-            "tickets_all":   tickets_all,
-            "tickets_month": tickets_month,
-        }
-        print(f"all={tickets_all}, this month={tickets_month}")
+# ── By product type (subject classification) ──────────────────────────────────
+mfa_count = sdk_count = other_count = 0
+for t in all_tickets:
+    text = ((t.get("subject") or "") + " " + (t.get("description") or "")[:200]).lower()
+    has_mfa = "mfa" in text or "mobile flow" in text
+    has_sdk = any(k in text for k in ["sdk", "espresso", "xcui", "appium", "wdio"])
+    if has_mfa:
+        mfa_count += 1
+    elif has_sdk:
+        sdk_count += 1
+    else:
+        other_count += 1
 
-    out = os.path.join(BASE, "zendesk_tickets.json")
-    with open(out, "w") as f:
-        json.dump(results, f, indent=2)
-    print(f"\nSaved {len(results)} accounts → {out}")
+# ── Save outputs ──────────────────────────────────────────────────────────────
+sev = [{"severity": k, "count": v} for k, v in sorted(priority_count.items(), key=lambda x: -x[1])]
+json.dump(sev, open(os.path.join(BASE, "zendesk_severity.json"), "w"), indent=2)
 
-if __name__ == "__main__":
-    main()
+types = [
+    {"type": "MFA",           "count": mfa_count},
+    {"type": "Mobile SDK",    "count": sdk_count},
+    {"type": "General Mobile","count": other_count},
+]
+json.dump(types, open(os.path.join(BASE, "zendesk_by_type.json"), "w"), indent=2)
+
+monthly = [{"month": k, "count": v} for k, v in sorted(by_month.items())]
+json.dump(monthly, open(os.path.join(BASE, "zendesk_monthly.json"), "w"), indent=2)
+
+# Current month
+cur_month = date.today().strftime("%Y-%m")
+cur_count = by_month.get(cur_month, 0)
+print(f"Saved zendesk_severity.json, zendesk_by_type.json, zendesk_monthly.json")
+print(f"Current month ({cur_month}): {cur_count} tickets")
+print(f"By status: {dict(status_count)}")
