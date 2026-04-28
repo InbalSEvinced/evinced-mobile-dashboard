@@ -58,12 +58,12 @@ for r in rows:
         "serviceAccountId": sa_id,
         "sdkType":          sdk_type,
         "sdkVariant":       None,   # not available in BigQuery
-        "sdkVersion":       "",     # not available in BigQuery scan_success
+        "sdkVersion":       "",   # not available in BigQuery scan_success
         "platformName":     r["platformName"] or "",
         "date":             str(r["date"]) if r["date"] else None,
         "scans":            int(r["scans"] or 0),
-        "total_issues":     0,      # not available in BigQuery
-        "critical_issues":  0,      # not available in BigQuery
+        "total_issues":     0,   # not available in BigQuery
+        "critical_issues":  0,   # not available in BigQuery
     })
 
 sdk = [r for r in normalized if r["sdkType"] != "MOBILE_FLOW_ANALYZER"]
@@ -75,3 +75,41 @@ out = os.path.join(BASE, "rows_with_sa.json")
 with open(out, "w") as f:
     json.dump(normalized, f)
 print(f"Saved to {out}")
+
+# ── 90-day daily aggregated rows (for charts) ─────────────────────────────────
+QUERY_90D = """
+SELECT
+  DATE(s._PARTITIONTIME)       AS date,
+  t.name                       AS tenantName,
+  COALESCE(sd.type, p.name)    AS sdkType,
+  s.os_name                    AS platformName,
+  COUNT(*)                     AS scans
+FROM `production-267908.analytics.scan_success` s
+LEFT JOIN `production-267908.analytics.d_sdk_types` sd  ON s.sdk_type    = sd.id
+LEFT JOIN `production-267908.analytics.d_products`  p   ON p.id          = s.product_name
+LEFT JOIN `production-267908.analytics.tenants`     t   ON s.tenant_id   = t.id
+WHERE DATE(s._PARTITIONTIME) >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
+  AND p.name IN ('MOBILE_SDK', 'MOBILE_FLOW_ANALYZER')
+  AND t.name IS NOT NULL AND t.name != ''
+GROUP BY 1, 2, 3, 4
+ORDER BY date, tenantName
+"""
+
+print("Querying BigQuery (90-day daily)…")
+rows_90d = list(client.query(QUERY_90D).result())
+print(f"Got {len(rows_90d)} daily rows (90d)")
+
+daily_normalized = []
+for r in rows_90d:
+    daily_normalized.append({
+        "date":        str(r["date"]) if r["date"] else None,
+        "tenantName":  r["tenantName"] or "",
+        "sdkType":     r["sdkType"] or "",
+        "platformName": r["platformName"] or "",
+        "scans":       int(r["scans"] or 0),
+    })
+
+out_90d = os.path.join(BASE, "daily_rows_90d.json")
+with open(out_90d, "w") as f:
+    json.dump(daily_normalized, f)
+print(f"Saved to {out_90d}")
