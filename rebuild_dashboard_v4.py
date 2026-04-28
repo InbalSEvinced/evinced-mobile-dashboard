@@ -260,6 +260,22 @@ date_labels  = [_dt.strptime(d, "%Y-%m-%d").strftime("%b %d") for d in all_dates
 data_start = all_dates[0]  if all_dates else ""
 data_end   = all_dates[-1] if all_dates else ""
 
+# ── Raw per-day user rows for date-filterable detail table ────────────────────
+raw_user_rows = []
+for r in rows:
+    uid = user_id(r) or ""
+    hs = HUBSPOT.get(r["tenantName"], {})
+    raw_user_rows.append({
+        "tenantName":  r["tenantName"],
+        "userId":      uid,
+        "sdkType":     r["sdkType"],
+        "date":        r.get("date") or "",
+        "scans":       r["scans"],
+        "se":          hs.get("se", "—"),
+        "is_internal": r["tenantName"] in INTERNALS,
+    })
+raw_user_rows_js = json.dumps(raw_user_rows)
+
 # ── JS blobs ───────────────────────────────────────────────────────────────────
 detail_rows_js  = json.dumps(detail_rows)
 account_rows_js = json.dumps(account_rows)
@@ -627,6 +643,7 @@ const DATE_LABELS   = {date_labels_js};
 const SDK_TYPE_PIE  = {sdk_type_pie_js};
 const SDK_TV_LIST   = {sdk_tv_js};
 const DETAIL_ROWS   = {detail_rows_js};
+const RAW_USER_ROWS = {raw_user_rows_js};
 const ACCOUNT_ROWS  = {account_rows_js};
 const INTERNALS        = new Set({internals_js});
 const SDK_PRODUCTS     = new Set({sdk_product_js});
@@ -959,15 +976,30 @@ function applyFilters() {{
   }});
   filteredAccounts = Object.values(acctMap);
 
-  // Detail table uses DETAIL_ROWS filtered by product/tenant/sdk/se only (not date)
-  filteredDetail = DETAIL_ROWS.filter(r => {{
+  // Detail table: aggregate RAW_USER_ROWS filtered by all active filters incl. date
+  const rawFiltered = RAW_USER_ROWS.filter(r => {{
+    if (!r.date || r.date < startDate || r.date > endDate) return false;
+    if (noWeekends && isWeekend(r.date)) return false;
     if (!showInternal && r.is_internal) return false;
     if (tenant  !== 'all' && r.tenantName !== tenant) return false;
-    if (product === 'mfa' && !r.sdkTypes.includes('MFA')) return false;
-    if (product === 'sdk' && r.sdkTypes.length === 1 && r.sdkTypes[0] === 'MFA') return false;
-    if (sdk     !== 'all' && !r.sdkTypes.includes(sdk)) return false;
-    if (se      !== 'all' && r.se !== se) return false;
+    if (product === 'mfa' && r.sdkType    !== 'MFA')  return false;
+    if (product === 'sdk' && r.sdkType    === 'MFA')  return false;
+    if (sdk     !== 'all' && r.sdkType    !== sdk)    return false;
+    if (se      !== 'all' && r.se         !== se)     return false;
     return true;
+  }});
+  const detMap = {{}};
+  rawFiltered.forEach(r => {{
+    const key = r.tenantName + '|||' + r.userId;
+    if (!detMap[key]) {{
+      detMap[key] = {{ tenantName: r.tenantName, userId: r.userId, sdkTypesSet: new Set(), scans: 0, se: r.se, is_internal: r.is_internal }};
+    }}
+    detMap[key].sdkTypesSet.add(r.sdkType);
+    detMap[key].scans += r.scans;
+  }});
+  filteredDetail = Object.values(detMap).map(r => {{
+    const types = [...r.sdkTypesSet].sort();
+    return {{ tenantName: r.tenantName, userId: r.userId, sdkTypes: types, sdkType: types.join(', '), scans: r.scans, se: r.se, is_internal: r.is_internal }};
   }});
 
   detPage = 0; acctPage = 0;
@@ -998,7 +1030,9 @@ function updateKPIs(startDate, endDate) {{
     if (!r.isInternal) tenantSet[r.tenantName] = 1;
     scans += r.scans;
   }});
+  const userSet = new Set(filteredDetail.filter(r => r.userId).map(r => r.userId));
   document.getElementById('k-tenants').textContent = Object.keys(tenantSet).length;
+  document.getElementById('k-users').textContent   = userSet.size;
   document.getElementById('k-scans').textContent   = scans.toLocaleString();
 
   const rangeLabel = startDate + ' – ' + endDate;
