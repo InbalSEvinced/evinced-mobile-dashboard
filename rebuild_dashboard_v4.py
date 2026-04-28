@@ -607,7 +607,7 @@ html = f"""<!DOCTYPE html>
   </div>
 
   <!-- USERS DETAIL TABLE -->
-  <div class="section-label">👤 Users <span>Per-user scan detail · last 14 days</span></div>
+  <div class="section-label">👤 Users <span id="detail-range-label">Per-user scan detail · selected date range</span></div>
   <div class="table-card">
     <div class="table-header">
       <div class="table-title">User Scan Detail</div>
@@ -1038,8 +1038,10 @@ function updateKPIs(startDate, endDate) {{
   const rangeLabel = startDate + ' – ' + endDate;
   const sub1 = document.getElementById('k-tenants-sub');
   const sub2 = document.getElementById('k-scans-sub');
+  const sub3 = document.getElementById('detail-range-label');
   if (sub1) sub1.textContent = rangeLabel + ' · excl. internals';
   if (sub2) sub2.textContent = rangeLabel;
+  if (sub3) sub3.textContent = 'Per-user scan detail · ' + rangeLabel;
 }}
 
 // ── Highlights — biggest drop ─────────────────────────────────────────────────
