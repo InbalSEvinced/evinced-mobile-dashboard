@@ -24,11 +24,14 @@ def fetch_page(url):
 
 # ── Fetch all mobile/MFA tickets ──────────────────────────────────────────────
 all_tickets = []
+org_map     = {}   # org_id → org name (sideloaded)
 query = "type:ticket (mobile OR MFA)"
-url   = f"{DOMAIN}/api/v2/search.json?" + urllib.parse.urlencode({"query": query, "per_page": 100})
+url   = f"{DOMAIN}/api/v2/search.json?" + urllib.parse.urlencode({"query": query, "per_page": 100, "include": "organizations"})
 
 while url:
     data = fetch_page(url)
+    for org in data.get("organizations", []):
+        org_map[org["id"]] = org["name"]
     all_tickets.extend(data.get("results", []))
     url = data.get("next_page")
     print(f"  Fetched {len(all_tickets)} tickets so far…")
@@ -85,12 +88,15 @@ for t in all_tickets:
     has_mfa = "mfa" in text or "mobile flow" in text
     has_sdk = any(k in text for k in ["sdk", "espresso", "xcui", "appium", "wdio"])
     ticket_type = "MFA" if has_mfa else ("Mobile SDK" if has_sdk else "General Mobile")
+    org_id   = t.get("organization_id")
+    org_name = org_map.get(org_id, "") if org_id else ""
     tickets_out.append({
-        "created_at":  t.get("created_at", ""),
-        "subject":     t.get("subject", ""),
-        "priority":    t.get("priority") or "normal",
-        "status":      t.get("status", ""),
-        "type":        ticket_type,
+        "created_at":   t.get("created_at", ""),
+        "subject":      t.get("subject", ""),
+        "priority":     t.get("priority") or "normal",
+        "status":       t.get("status", ""),
+        "type":         ticket_type,
+        "organization": org_name,
     })
 json.dump(tickets_out, open(os.path.join(BASE, "zendesk_tickets.json"), "w"), indent=2)
 
