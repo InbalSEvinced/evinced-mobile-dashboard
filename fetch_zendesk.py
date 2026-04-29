@@ -24,19 +24,29 @@ def fetch_page(url):
 
 # ── Fetch all mobile/MFA tickets ──────────────────────────────────────────────
 all_tickets = []
-org_map     = {}   # org_id → org name (sideloaded)
 query = "type:ticket (mobile OR MFA)"
-url   = f"{DOMAIN}/api/v2/search.json?" + urllib.parse.urlencode({"query": query, "per_page": 100, "include": "organizations"})
+url   = f"{DOMAIN}/api/v2/search.json?" + urllib.parse.urlencode({"query": query, "per_page": 100})
 
 while url:
     data = fetch_page(url)
-    for org in data.get("organizations", []):
-        org_map[org["id"]] = org["name"]
     all_tickets.extend(data.get("results", []))
     url = data.get("next_page")
     print(f"  Fetched {len(all_tickets)} tickets so far…")
 
 print(f"Total: {len(all_tickets)} mobile/MFA tickets")
+
+# ── Resolve org names via show_many (sideloading on search API is unreliable) ─
+org_map = {}   # org_id → org name
+org_ids = list(set(t["organization_id"] for t in all_tickets if t.get("organization_id")))
+if org_ids:
+    # Zendesk show_many allows up to 100 IDs per request
+    for i in range(0, len(org_ids), 100):
+        chunk = org_ids[i:i+100]
+        ids_str = ",".join(str(x) for x in chunk)
+        orgs_data = fetch_page(f"{DOMAIN}/api/v2/organizations/show_many.json?ids={ids_str}")
+        for o in orgs_data.get("organizations", []):
+            org_map[o["id"]] = o["name"]
+    print(f"Resolved {len(org_map)} org names")
 
 # ── Severity breakdown ────────────────────────────────────────────────────────
 priority_count = defaultdict(int)
