@@ -577,14 +577,14 @@ html = f"""<!DOCTYPE html>
         <div class="chart-title">Zendesk by Severity</div>
         <span class="chart-source" id="zd-sev-source">Zendesk · filtered by date</span>
       </div></div>
-      <div class="chart-wrap"><canvas id="ch-zd-severity"></canvas></div>
+      <div class="chart-wrap" id="wrap-zd-severity"><canvas id="ch-zd-severity"></canvas></div>
     </div>
     <div class="chart-card">
       <div class="chart-header"><div>
         <div class="chart-title">Zendesk by Product Area</div>
         <span class="chart-source" id="zd-type-source">Zendesk · filtered by date</span>
       </div></div>
-      <div class="chart-wrap"><canvas id="ch-tickets"></canvas></div>
+      <div class="chart-wrap" id="wrap-zd-tickets"><canvas id="ch-tickets"></canvas></div>
     </div>
     <div class="chart-card">
       <div class="chart-header"><div><div class="chart-title">SDK Type + Platform</div><span class="chart-source">BigQuery · os_name as variant</span></div></div>
@@ -722,33 +722,68 @@ function isWeekend(dateStr) {{
   return day === 0 || day === 6;
 }}
 
-function zdFilteredTickets(startDate, endDate, noWeekends) {{
+function zdFilteredTickets(startDate, endDate, noWeekends, tenantFilter) {{
   return ZD_TICKETS.filter(t => {{
     if (!t.date || t.date < startDate || t.date > endDate) return false;
     if (noWeekends && isWeekend(t.date)) return false;
+    if (tenantFilter && tenantFilter !== 'all') {{
+      const org = (t.organization || '').toLowerCase().trim();
+      const tgt = tenantFilter.toLowerCase().trim();
+      if (org !== tgt) return false;
+    }}
     return true;
   }});
 }}
 
-function updateZendeskCharts(startDate, endDate, noWeekends) {{
-  const tickets = zdFilteredTickets(startDate, endDate, noWeekends);
+function setZdEmpty(chartId, wrapperId, message) {{
+  const wrap = document.getElementById(wrapperId);
+  if (!wrap) return;
+  let msg = wrap.querySelector('.zd-empty-msg');
+  if (!msg) {{
+    msg = document.createElement('div');
+    msg.className = 'zd-empty-msg';
+    msg.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--faint);font-style:italic;';
+    wrap.style.position = 'relative';
+    wrap.appendChild(msg);
+  }}
+  const canvas = document.getElementById(chartId);
+  if (canvas) canvas.style.display = message ? 'none' : '';
+  msg.textContent = message || '';
+  msg.style.display = message ? 'flex' : 'none';
+}}
+
+function updateZendeskCharts(startDate, endDate, noWeekends, tenantFilter) {{
+  const tickets = zdFilteredTickets(startDate, endDate, noWeekends, tenantFilter);
   const total   = tickets.length;
+
+  const ZD_SEV_COLORS = {{'Normal':'#3B82F6','Low':'#10B981','High':'#F59E0B','Urgent':'#EF4444','Critical':'#DC2626'}};
+  const ZD_TYPE_COLORS = ['#6D28D9','#3B82F6','#0D9488'];
+  const noTicketsMsg = tenantFilter && tenantFilter !== 'all'
+    ? 'No tickets for this tenant in this period'
+    : 'No tickets for this period';
+
+  if (total === 0) {{
+    setZdEmpty('ch-zd-severity', 'wrap-zd-severity', noTicketsMsg);
+    setZdEmpty('ch-tickets',     'wrap-zd-tickets',  noTicketsMsg);
+    const ss = document.getElementById('zd-sev-source'); if(ss) ss.textContent = 'Zendesk · 0 tickets';
+    const ts = document.getElementById('zd-type-source'); if(ts) ts.textContent = 'Zendesk · 0 tickets';
+    return;
+  }}
+
+  // Clear empty state
+  setZdEmpty('ch-zd-severity', 'wrap-zd-severity', '');
+  setZdEmpty('ch-tickets',     'wrap-zd-tickets',  '');
 
   // Severity aggregation
   const sevAgg = {{}};
   tickets.forEach(t => {{ sevAgg[t.priority] = (sevAgg[t.priority]||0) + 1; }});
   const sevOrder = ['Normal','Low','High','Urgent','Critical'];
   const sevEntries = sevOrder.filter(k => sevAgg[k]).map(k => [k, sevAgg[k]]);
-  // Also add any unexpected priorities
   Object.entries(sevAgg).forEach(([k,v]) => {{ if (!sevOrder.includes(k)) sevEntries.push([k,v]); }});
 
   // Type aggregation
   const typeAgg = {{}};
   tickets.forEach(t => {{ typeAgg[t.type] = (typeAgg[t.type]||0) + 1; }});
-
-  const ZD_SEV_COLORS = {{'Normal':'#3B82F6','Low':'#10B981','High':'#F59E0B','Urgent':'#EF4444','Critical':'#DC2626'}};
-  const ZD_TYPE_COLORS = ['#6D28D9','#3B82F6','#0D9488'];
-  const CC2 = ['#6D28D9','#3B82F6','#0D9488','#F59E0B','#EF4444','#10B981'];
 
   if (CHARTS.zdSeverity) {{
     const labels = sevEntries.map(([k])=>k);
@@ -768,11 +803,10 @@ function updateZendeskCharts(startDate, endDate, noWeekends) {{
     CHARTS.tickets.update();
   }}
 
-  // Update source labels
-  const src = `${{total}} tickets · ${{startDate}} – ${{endDate}}`;
-  const sl = document.getElementById('zd-section-label'); if(sl) sl.textContent = 'mobile/MFA · ' + src;
-  const ss = document.getElementById('zd-sev-source');   if(ss) ss.textContent = 'Zendesk · ' + src;
-  const ts = document.getElementById('zd-type-source');  if(ts) ts.textContent = 'Zendesk · ' + src;
+  const tenantLabel = (tenantFilter && tenantFilter !== 'all') ? tenantFilter + ' · ' : '';
+  const src = `${{tenantLabel}}${{total}} ticket${{total!==1?'s':''}} · ${{startDate}} – ${{endDate}}`;
+  const ss = document.getElementById('zd-sev-source');  if(ss) ss.textContent = 'Zendesk · ' + src;
+  const ts = document.getElementById('zd-type-source'); if(ts) ts.textContent = 'Zendesk · ' + src;
 }}
 
 function getDateRange() {{
@@ -1061,7 +1095,7 @@ function applyFilters() {{
   detPage = 0; acctPage = 0;
   updateKPIs(startDate, endDate);
   updateCharts();
-  updateZendeskCharts(startDate, endDate, noWeekends);
+  updateZendeskCharts(startDate, endDate, noWeekends, tenant);
   updateHighlights(startDate, endDate);
   renderAccounts();
   renderDetail();
