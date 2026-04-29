@@ -852,7 +852,7 @@ function initCharts() {{
   const dlFmt = (v, ctx) => {{
     const total = ctx.chart.data.datasets[0].data.reduce((a,b)=>a+b,0);
     const pct = Math.round(v/total*100);
-    return pct >= 5 ? pct+'%\n'+v.toLocaleString() : '';
+    return pct >= 5 ? pct+'%\\n'+v.toLocaleString() : '';
   }};
   const dlOpts = {{ color:'#fff', font:{{size:10,weight:'bold'}}, formatter: dlFmt }};
 
