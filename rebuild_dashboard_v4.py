@@ -680,9 +680,6 @@ const DATA_END      = {json.dumps(data_end)};
 
 const PER_PAGE = 10;
 
-// Register datalabels plugin for pie/doughnut charts
-Chart.register(ChartDataLabels);
-
 // ACCT_META for static HubSpot-sourced fields
 const ACCT_META = {{}};
 ACCOUNT_ROWS.forEach(r => {{ ACCT_META[r.tenantName] = r; }});
@@ -850,9 +847,19 @@ function initCharts() {{
   CHARTS.tenants = mkLine('ch-tenants', 'Active Tenants', '#3B82F6', baseline.labels, baseline.tenants);
   CHARTS.scans   = mkLine('ch-scans',   'Total Scans',    '#6D28D9', baseline.labels, baseline.scans);
 
+  // Safe datalabels: only load plugin per-chart if CDN loaded successfully
+  const DL = (typeof ChartDataLabels !== 'undefined') ? [ChartDataLabels] : [];
+  const dlFmt = (v, ctx) => {{
+    const total = ctx.chart.data.datasets[0].data.reduce((a,b)=>a+b,0);
+    const pct = Math.round(v/total*100);
+    return pct >= 5 ? pct+'%\n'+v.toLocaleString() : '';
+  }};
+  const dlOpts = {{ color:'#fff', font:{{size:10,weight:'bold'}}, formatter: dlFmt }};
+
   // SDK type pie
   CHARTS.sdkType = new Chart(document.getElementById('ch-sdk-type'), {{
     type: 'pie',
+    plugins: DL,
     data: {{ labels: SDK_TYPE_PIE.map(s=>s.sdkType),
              datasets: [{{ data: SDK_TYPE_PIE.map(s=>s.scans),
                backgroundColor: SDK_TYPE_PIE.map((_,i)=>CC[i%CC.length]+'CC'),
@@ -861,11 +868,7 @@ function initCharts() {{
       plugins: {{
         legend:{{position:'bottom',labels:{{font:{{size:9}},padding:8,boxWidth:10}}}},
         tooltip:{{callbacks:{{label:ctx=>' '+ctx.label+': '+ctx.parsed.toLocaleString()+' scans'}}}},
-        datalabels:{{ color:'#fff', font:{{size:10,weight:'bold'}}, formatter:(v,ctx)=>{{
-          const total=ctx.chart.data.datasets[0].data.reduce((a,b)=>a+b,0);
-          const pct=Math.round(v/total*100);
-          return pct>=5 ? pct+'%\n'+v.toLocaleString() : '';
-        }}}}
+        datalabels: dlOpts
       }}
     }}
   }});
@@ -883,28 +886,24 @@ function initCharts() {{
                  y:{{grid:{{display:false}},ticks:{{font:{{size:9}},color:'#64748B'}}}} }} }}
   }});
 
-  // Zendesk charts — initialized empty; applyFilters() will populate them with the correct date range
-  const ZD_SEV_COLORS_INIT = {{'Normal':'#3B82F6','Low':'#10B981','High':'#F59E0B','Urgent':'#EF4444','Critical':'#DC2626'}};
-  const pieDLOpts = {{ color:'#fff', font:{{size:10,weight:'bold'}}, formatter:(v,ctx)=>{{
-    const total=ctx.chart.data.datasets[0].data.reduce((a,b)=>a+b,0);
-    const pct=Math.round(v/total*100);
-    return pct>=8 ? pct+'%\n'+v : '';
-  }}}};
+  // Zendesk charts — initialized empty; applyFilters() will populate with correct date range
   CHARTS.zdSeverity = new Chart(document.getElementById('ch-zd-severity'), {{
     type: 'pie',
+    plugins: DL,
     data: {{ labels: [], datasets: [{{ data: [], backgroundColor: [], borderColor: [], borderWidth: 2 }}] }},
     options: {{ responsive:true, maintainAspectRatio:false,
       plugins: {{ legend:{{position:'bottom',labels:{{font:{{size:9}},padding:8,boxWidth:10}}}},
         tooltip:{{callbacks:{{label:ctx=>' '+ctx.label+': '+ctx.parsed+' ticket'+(ctx.parsed!==1?'s':'')}}}},
-        datalabels: pieDLOpts }} }}
+        datalabels: dlOpts }} }}
   }});
   CHARTS.tickets = new Chart(document.getElementById('ch-tickets'), {{
     type: 'doughnut',
+    plugins: DL,
     data: {{ labels: [], datasets: [{{ data: [], backgroundColor: [], borderColor: [], borderWidth: 2 }}] }},
     options: {{ responsive:true, maintainAspectRatio:false, cutout:'55%',
       plugins: {{ legend:{{position:'bottom',labels:{{font:{{size:9}},padding:8,boxWidth:10}}}},
         tooltip:{{backgroundColor:'#1E293B',callbacks:{{label:ctx=>' '+ctx.label+': '+ctx.parsed+' ticket'+(ctx.parsed!==1?'s':'')}}}},
-        datalabels: pieDLOpts }} }}
+        datalabels: dlOpts }} }}
   }});
 }}
 
