@@ -572,7 +572,7 @@ html = f"""<!DOCTYPE html>
     </div>
     <div class="chart-card" id="card-sdk-tv">
       <div class="chart-header"><div><div class="chart-title">SDK Type + Platform</div><span class="chart-source">BigQuery · os_name as variant</span></div></div>
-      <div class="chart-wrap"><canvas id="ch-sdk-tv"></canvas></div>
+      <div id="sdk-tv-wrap" style="height:170px;overflow-y:auto;position:relative"><canvas id="ch-sdk-tv"></canvas></div>
     </div>
   </div>
 
@@ -793,15 +793,21 @@ function updateDynamicChart(product) {{
     // Update card-sdk-tv title
     const sdkTvTitle = sdkTvCard ? sdkTvCard.querySelector('.chart-title') : null;
     const sdkTvSrc   = sdkTvCard ? sdkTvCard.querySelector('.chart-source') : null;
-    if (sdkTvTitle) sdkTvTitle.textContent = 'MFA Scans by Top Tenants';
-    if (sdkTvSrc)   sdkTvSrc.textContent   = 'BigQuery · MFA scans · top 12 tenants';
-    CHARTS.sdkTV.config.type = 'bar';
+    if (sdkTvTitle) sdkTvTitle.textContent = 'MFA Usage by Top Tenants';
+    if (sdkTvSrc)   sdkTvSrc.textContent   = 'BigQuery · MFA scans · top 5 tenants';
+    CHARTS.sdkTV.config.type = 'pie';
     CHARTS.sdkTV.data.labels = tenantEntries.map(([k])=>k);
     CHARTS.sdkTV.data.datasets[0].data = tenantEntries.map(([,v])=>v);
-    CHARTS.sdkTV.data.datasets[0].backgroundColor = tenantEntries.map((_,i)=>CC[i%CC.length]+'BB');
+    CHARTS.sdkTV.data.datasets[0].backgroundColor = tenantEntries.map((_,i)=>CC[i%CC.length]+'CC');
     CHARTS.sdkTV.data.datasets[0].borderColor      = tenantEntries.map((_,i)=>CC[i%CC.length]);
-    CHARTS.sdkTV.options.indexAxis = 'y';
-    CHARTS.sdkTV.options.plugins.datalabels = dlBar(true);
+    CHARTS.sdkTV.options.indexAxis = undefined;
+    CHARTS.sdkTV.options.plugins.datalabels = dlPie();
+    // Reset canvas height for pie (no scroll needed)
+    const sdkTvWrapMfa = document.getElementById('sdk-tv-wrap');
+    const sdkTvCanvasMfa = document.getElementById('ch-sdk-tv');
+    if (sdkTvCanvasMfa) {{ sdkTvCanvasMfa.style.height = '170px'; sdkTvCanvasMfa.height = 170; }}
+    if (sdkTvWrapMfa) sdkTvWrapMfa.style.overflowY = 'hidden';
+    CHARTS.sdkTV.resize();
     CHARTS.sdkTV.update();
 
   }} else if (product === 'sdk') {{
@@ -924,19 +930,29 @@ function initCharts() {{
         tooltip:{{callbacks:{{label:ctx=>' '+ctx.label+': '+ctx.parsed.toLocaleString()+' scans'}}}} }} }}
   }});
 
-  // SDK type + platform bar
+  // SDK type + platform bar — responsive:false so we can control height for scrolling
   CHARTS.sdkTV = new Chart(document.getElementById('ch-sdk-tv'), {{
     type: 'bar',
     data: {{ labels: SDK_TV_LIST.map(s=>s.label),
              datasets: [{{ data: SDK_TV_LIST.map(s=>s.scans),
                backgroundColor: SDK_TV_LIST.map((_,i)=>CC[i%CC.length]+'BB'),
                borderColor:     SDK_TV_LIST.map((_,i)=>CC[i%CC.length]), borderWidth:1 }}] }},
-    options: {{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+    options: {{ indexAxis:'y', responsive:false, maintainAspectRatio:false,
       plugins: {{ datalabels: dlBar(true), legend:{{display:false}},
         tooltip:{{backgroundColor:'#1E293B',callbacks:{{label:ctx=>' '+ctx.parsed.x.toLocaleString()+' scans'}}}} }},
       scales: {{ x:{{grid:{{color:'#F1F5F9'}},ticks:{{font:{{size:9}},color:'#94A3B8'}},beginAtZero:true}},
                  y:{{grid:{{display:false}},ticks:{{font:{{size:9}},color:'#64748B'}}}} }} }}
   }});
+  // Set initial sdkTV height
+  (function() {{
+    const wrap = document.getElementById('sdk-tv-wrap');
+    const canvas = document.getElementById('ch-sdk-tv');
+    const n = SDK_TV_LIST.length;
+    const h = Math.max(170, n * 28 + 20);
+    if (canvas) {{ canvas.style.width = '100%'; canvas.width = wrap ? wrap.offsetWidth : 400; canvas.style.height = h+'px'; canvas.height = h; }}
+    if (wrap) wrap.style.overflowY = n > 5 ? 'auto' : 'hidden';
+    CHARTS.sdkTV.resize();
+  }})();
 
   // Dynamic chart — MFA platform distribution (pie) or SDK/MFA top tenants (bar)
   CHARTS.dynamic = new Chart(document.getElementById('ch-dynamic'), {{
@@ -980,7 +996,7 @@ function updateCharts() {{
   CHARTS.sdkType.data.datasets[0].borderColor = sortedTypes.map((_,i)=>CC[i%CC.length]);
   CHARTS.sdkType.update();
 
-  // SDK type + platform bar
+  // SDK type + platform bar — scrollable, all items, 5 visible
   const sdkTVAgg = {{}};
   filteredDaily.forEach(r => {{
     const key = r.sdkType + ' / ' + (r.platform||'—');
@@ -991,6 +1007,16 @@ function updateCharts() {{
   CHARTS.sdkTV.data.datasets[0].data = sortedTV.map(([,v])=>v);
   CHARTS.sdkTV.data.datasets[0].backgroundColor = sortedTV.map((_,i)=>CC[i%CC.length]+'BB');
   CHARTS.sdkTV.data.datasets[0].borderColor = sortedTV.map((_,i)=>CC[i%CC.length]);
+  // Resize canvas to fit all bars, container scrolls
+  (function() {{
+    const wrap = document.getElementById('sdk-tv-wrap');
+    const canvas = document.getElementById('ch-sdk-tv');
+    const n = sortedTV.length;
+    const h = Math.max(170, n * 28 + 20);
+    if (canvas) {{ canvas.style.height = h+'px'; canvas.height = h; canvas.width = wrap ? wrap.offsetWidth : 400; canvas.style.width='100%'; }}
+    if (wrap) wrap.style.overflowY = n > 5 ? 'auto' : 'hidden';
+  }})();
+  CHARTS.sdkTV.resize();
   CHARTS.sdkTV.update();
 
   // Line charts
