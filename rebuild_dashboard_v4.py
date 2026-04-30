@@ -785,8 +785,8 @@ function updateDynamicChart(product) {{
     CHARTS.dynamic.options.plugins.datalabels = dlPie();
     CHARTS.dynamic.update();
 
-// Slot 3 (sdk-tv): MFA Scans by Top Tenants — horizontal bar, distinct colors
-    if (sdkTvCard) sdkTvCard.style.display = '';
+// Slot 3 (sdk-tv): hidden for MFA filter
+    if (sdkTvCard) sdkTvCard.style.display = 'none';
     const tenantAgg = {{}};
     filteredDaily.forEach(r => {{ if (r.sdkType === 'MFA' && !r.isInternal) tenantAgg[r.tenantName] = (tenantAgg[r.tenantName]||0) + r.scans; }});
     const tenantEntries = Object.entries(tenantAgg).sort((a,b)=>b[1]-a[1]).slice(0,5);
