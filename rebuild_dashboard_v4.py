@@ -787,8 +787,8 @@ function updateDynamicChart(product) {{
 
 // Slot 3 (sdk-tv): MFA Scans by Top Tenants — horizontal bar, distinct colors
     if (sdkTvCard) sdkTvCard.style.display = '';
-    const tenantAgg = {};
-    filteredDaily.forEach(r => { if (r.sdkType === 'MFA' && !r.isInternal) tenantAgg[r.tenantName] = (tenantAgg[r.tenantName]||0) + r.scans; });
+    const tenantAgg = {{}};
+    filteredDaily.forEach(r => {{ if (r.sdkType === 'MFA' && !r.isInternal) tenantAgg[r.tenantName] = (tenantAgg[r.tenantName]||0) + r.scans; }});
     const tenantEntries = Object.entries(tenantAgg).sort((a,b)=>b[1]-a[1]).slice(0,5);
     const sdkTvTitle = sdkTvCard ? sdkTvCard.querySelector('.chart-title') : null;
     const sdkTvSrc   = sdkTvCard ? sdkTvCard.querySelector('.chart-source') : null;
@@ -801,21 +801,20 @@ function updateDynamicChart(product) {{
     CHARTS.sdkTV.data.datasets[0].borderColor      = tenantEntries.map((_,i)=>CC[i%CC.length]);
     CHARTS.sdkTV.data.datasets[0].borderRadius     = 4;
     CHARTS.sdkTV.options.indexAxis = 'y';
-    CHARTS.sdkTV.options.plugins.datalabels = {
+    CHARTS.sdkTV.options.plugins.datalabels = {{
       anchor: 'end', align: 'end',
       color: (ctx) => CC[ctx.dataIndex % CC.length],
-      font: { size: 11, weight: '500' },
+      font: {{ size: 11, weight: '500' }},
       formatter: (v) => v.toLocaleString()
-    };
-    CHARTS.sdkTV.options.layout = { padding: { right: 60 } };
+    }};
+    CHARTS.sdkTV.options.layout = {{ padding: {{ right: 60 }} }};
     const sdkTvWrapMfa = document.getElementById('sdk-tv-wrap');
     const sdkTvCanvasMfa = document.getElementById('ch-sdk-tv');
     const mfaBarH = tenantEntries.length * 48 + 60;
-    if (sdkTvCanvasMfa) { sdkTvCanvasMfa.style.height = mfaBarH+'px'; sdkTvCanvasMfa.height = mfaBarH; }
+    if (sdkTvCanvasMfa) {{ sdkTvCanvasMfa.style.height = mfaBarH+'px'; sdkTvCanvasMfa.height = mfaBarH; }}
     if (sdkTvWrapMfa) sdkTvWrapMfa.style.overflowY = 'hidden';
     CHARTS.sdkTV.resize();
     CHARTS.sdkTV.update();
-
   }} else if (product === 'sdk') {{
     // Slot 1 (dynamic): SDK Breakdown by Top Tenants — bar
     card.style.display = '';
