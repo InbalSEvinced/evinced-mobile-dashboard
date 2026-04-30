@@ -1,3 +1,6 @@
 fastapi==0.115.4
 uvicorn[standard]==0.32.0
 google-cloud-bigquery
+playwright
+requests
+python-dotenv
