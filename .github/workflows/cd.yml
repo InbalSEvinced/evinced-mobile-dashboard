@@ -1,0 +1,35 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch: {}
+
+# A release-tag push and the merge commit that produced it arrive nearly
+# simultaneously. Queue the second run rather than cancel it — deploy.sh is
+# idempotent but we don't want two gcloud run deploy commands racing on the
+# same revision.
+concurrency:
+  group: cd
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      # deploy.sh is the single source of truth: enables APIs, creates the
+      # Artifact Registry repo, secret, runtime + scheduler SAs, IAM
+      # bindings, Cloud Build image, Cloud Run deploy, invoker grants, and
+      # the daily Cloud Scheduler job. All steps are idempotent.
+      - name: Deploy via deploy.sh
+        run: bash deploy.sh

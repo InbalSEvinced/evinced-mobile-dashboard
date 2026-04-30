@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff
+      # Narrow ruleset: syntax errors, invalid f-strings, import issues,
+      # undefined names. Broader style rules would flag pre-existing code
+      # that was never linted; see docs/superpowers/specs/2026-04-23-github-actions-ci-cd-design.md.
+      - run: ruff check --select E9,F63,F7,F82 .
+
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t mobile-dashboard:ci .
+
+      - name: Start container
+        run: docker run -d --name smoke -p 8080:8080 mobile-dashboard:ci
+
+      - name: Wait for /healthz
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/healthz; then
+              echo
+              echo "healthz ok after ${i} attempt(s)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "healthz never responded — dumping logs"
+          docker logs smoke
+          exit 1
+
+      - name: Cleanup container
+        if: always()
+        run: docker rm -f smoke || true
