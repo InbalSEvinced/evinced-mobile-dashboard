@@ -785,27 +785,33 @@ function updateDynamicChart(product) {{
     CHARTS.dynamic.options.plugins.datalabels = dlPie();
     CHARTS.dynamic.update();
 
-    // Slot 3 (sdk-tv): MFA Scans by Top Tenants — bar
+// Slot 3 (sdk-tv): MFA Scans by Top Tenants — horizontal bar, distinct colors
     if (sdkTvCard) sdkTvCard.style.display = '';
-    const tenantAgg = {{}};
-    filteredDaily.forEach(r => {{ if (r.sdkType === 'MFA' && !r.isInternal) tenantAgg[r.tenantName] = (tenantAgg[r.tenantName]||0) + r.scans; }});
+    const tenantAgg = {};
+    filteredDaily.forEach(r => { if (r.sdkType === 'MFA' && !r.isInternal) tenantAgg[r.tenantName] = (tenantAgg[r.tenantName]||0) + r.scans; });
     const tenantEntries = Object.entries(tenantAgg).sort((a,b)=>b[1]-a[1]).slice(0,5);
-    // Update card-sdk-tv title
     const sdkTvTitle = sdkTvCard ? sdkTvCard.querySelector('.chart-title') : null;
     const sdkTvSrc   = sdkTvCard ? sdkTvCard.querySelector('.chart-source') : null;
-    if (sdkTvTitle) sdkTvTitle.textContent = 'MFA Usage by Top Tenants';
+    if (sdkTvTitle) sdkTvTitle.textContent = 'MFA Scans by Top Tenants';
     if (sdkTvSrc)   sdkTvSrc.textContent   = 'BigQuery · MFA scans · top 5 tenants';
-    CHARTS.sdkTV.config.type = 'pie';
+    CHARTS.sdkTV.config.type = 'bar';
     CHARTS.sdkTV.data.labels = tenantEntries.map(([k])=>k);
     CHARTS.sdkTV.data.datasets[0].data = tenantEntries.map(([,v])=>v);
     CHARTS.sdkTV.data.datasets[0].backgroundColor = tenantEntries.map((_,i)=>CC[i%CC.length]+'CC');
     CHARTS.sdkTV.data.datasets[0].borderColor      = tenantEntries.map((_,i)=>CC[i%CC.length]);
-    CHARTS.sdkTV.options.indexAxis = undefined;
-    CHARTS.sdkTV.options.plugins.datalabels = dlPie();
-    // Reset canvas height for pie (no scroll needed)
+    CHARTS.sdkTV.data.datasets[0].borderRadius     = 4;
+    CHARTS.sdkTV.options.indexAxis = 'y';
+    CHARTS.sdkTV.options.plugins.datalabels = {
+      anchor: 'end', align: 'end',
+      color: (ctx) => CC[ctx.dataIndex % CC.length],
+      font: { size: 11, weight: '500' },
+      formatter: (v) => v.toLocaleString()
+    };
+    CHARTS.sdkTV.options.layout = { padding: { right: 60 } };
     const sdkTvWrapMfa = document.getElementById('sdk-tv-wrap');
     const sdkTvCanvasMfa = document.getElementById('ch-sdk-tv');
-    if (sdkTvCanvasMfa) {{ sdkTvCanvasMfa.style.height = '170px'; sdkTvCanvasMfa.height = 170; }}
+    const mfaBarH = tenantEntries.length * 48 + 60;
+    if (sdkTvCanvasMfa) { sdkTvCanvasMfa.style.height = mfaBarH+'px'; sdkTvCanvasMfa.height = mfaBarH; }
     if (sdkTvWrapMfa) sdkTvWrapMfa.style.overflowY = 'hidden';
     CHARTS.sdkTV.resize();
     CHARTS.sdkTV.update();
